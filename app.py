@@ -157,6 +157,8 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
     seed = request.seed if request.seed else torch.randint(0, 2**32, (1,)).item()
     cv2image = cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR)
     faces = face_analysis_app.get(cv2image)
+    if len(faces) == 0:
+        raise HTTPException(status_code=400, detail="No face detected in the provided image")
     faceid_embeds = torch.from_numpy(faces[0].normed_embedding).unsqueeze(0)
     pose_image_cv2  = np.array(pose_image)
 
