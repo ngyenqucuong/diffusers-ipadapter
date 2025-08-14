@@ -40,7 +40,9 @@ face_analysis_app = None
 executor = ThreadPoolExecutor(max_workers=1)
 ip_model = None
 
-
+snapshot_download(
+    repo_id="h94/IP-Adapter", allow_patterns="models/image_encoder/*", local_dir="."
+)
 
 def initialize_pipelines():
     """Initialize the diffusion pipelines with InstantID and SDXL-Lightning - GPU optimized"""
