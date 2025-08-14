@@ -91,7 +91,6 @@ def initialize_pipelines():
             pipe.scheduler.config, 
             timestep_spacing="trailing"
         )
-        pipe.enable_vae_slicing()
         ip_model = IPAdapterFaceIDPlusXL(pipe,image_encoder_path ,ip_ckpt, "cuda")
 
 
