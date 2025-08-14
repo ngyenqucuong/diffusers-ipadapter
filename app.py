@@ -84,8 +84,6 @@ def initialize_pipelines():
             controlnet=controlnet,
             safety_checker=None
         )
-        pipe.load_lora_weights(hf_hub_download(repo, ckpt))
-        pipe.fuse_lora()
         pipe.scheduler = EulerDiscreteScheduler.from_config(
             pipe.scheduler.config, 
             timestep_spacing="trailing"
