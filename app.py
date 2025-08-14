@@ -57,7 +57,7 @@ def initialize_pipelines():
         
         # Path to InstantID models
         
-        hf_hub_download(repo_id="h94/IP-Adapter-FaceID", filename="ip-adapter-faceid-plusv2_sdxl.bin")
+        
         # Load ControlNet
         logger.info("Loading ControlNet...")        
         # SDXL-Lightning LoRA path
@@ -66,7 +66,7 @@ def initialize_pipelines():
         ckpt = "sdxl_lightning_4step_unet.safetensors"
         # Base model path
         base_model_path = "stabilityai/stable-diffusion-xl-base-1.0"
-        ip_ckpt = "ip-adapter-faceid-plusv2_sdxl.bin"
+        ip_ckpt = hf_hub_download(repo_id="h94/IP-Adapter-FaceID", filename="ip-adapter-faceid-plusv2_sdxl.bin")
         controlnet_model_path = "lllyasviel/control_v11f1p_sd15_depth"
         controlnet = ControlNetModel.from_pretrained(controlnet_model_path, torch_dtype=torch.float16)
         logger.info("Loading SDXL base pipeline...")
