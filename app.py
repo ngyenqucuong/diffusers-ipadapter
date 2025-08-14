@@ -74,7 +74,7 @@ def initialize_pipelines():
         vae = AutoencoderKL.from_pretrained(vae_model_path).to(dtype=torch.float16)
         unet = UNet2DConditionModel.load_config(base_model_path, subfolder="unet").to("cuda", torch.float16)
         unet.load_state_dict(load_file(hf_hub_download(repo, ckpt), device="cuda"))
-        image_encoder_path = "laion/CLIP-ViT-H-14-laion2B-s32B-b79K"
+        image_encoder_path = "models/image_encoder"
 
         
         pipe = StableDiffusionControlNetInpaintPipeline.from_pretrained(
