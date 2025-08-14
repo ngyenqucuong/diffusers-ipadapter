@@ -29,9 +29,6 @@ from huggingface_hub import hf_hub_download, snapshot_download
 
 import cv2
 
-snapshot_download(
-    repo_id="h94/IP-Adapter-FaceID", filename="ip-adapter-faceid-plusv2_sdxl.bin"
-)
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -42,6 +39,8 @@ pipe = None
 face_analysis_app = None
 executor = ThreadPoolExecutor(max_workers=1)
 ip_model = None
+
+
 
 def initialize_pipelines():
     """Initialize the diffusion pipelines with InstantID and SDXL-Lightning - GPU optimized"""
@@ -56,6 +55,7 @@ def initialize_pipelines():
         
         # Path to InstantID models
         
+        hf_hub_download(repo_id="h94/IP-Adapter-FaceID", filename="ip-adapter-faceid-plusv2_sdxl.bin")
         # Load ControlNet
         logger.info("Loading ControlNet...")        
         # SDXL-Lightning LoRA path
