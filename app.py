@@ -72,7 +72,7 @@ def initialize_pipelines():
         logger.info("Loading SDXL base pipeline...")
         vae_model_path = "stabilityai/sd-vae-ft-mse"
         vae = AutoencoderKL.from_pretrained(vae_model_path).to(dtype=torch.float16)
-        unet = UNet2DConditionModel.load_config(base_model_path, subfolder="unet").to("cuda", torch.float16)
+        unet = UNet2DConditionModel.from_config(base_model_path, subfolder="unet").to("cuda", torch.float16)
         unet.load_state_dict(load_file(hf_hub_download(repo, ckpt), device="cuda"))
         image_encoder_path = "models/image_encoder"
 
