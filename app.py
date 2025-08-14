@@ -30,7 +30,7 @@ from huggingface_hub import hf_hub_download, snapshot_download
 import cv2
 
 snapshot_download(
-    repo_id="h94/IP-Adapter", allow_patterns="sdxl_models/*", local_dir="."
+    repo_id="h94/IP-Adapter-FaceID", filename="ip-adapter-faceid-plusv2_sdxl.bin"
 )
 
 # Setup logging
@@ -63,8 +63,8 @@ def initialize_pipelines():
         # Load SDXL-Lightning LoRA
         ckpt = "sdxl_lightning_4step_unet.safetensors"
         # Base model path
-        base_model_path = "runwayml/stable-diffusion-v1-5"
-        ip_ckpt = "sdxl_models/ip-adapter_sdxl.bin"
+        base_model_path = "stabilityai/stable-diffusion-xl-base-1.0"
+        ip_ckpt = "ip-adapter-faceid-plusv2_sdxl.bin"
         controlnet_model_path = "lllyasviel/control_v11f1p_sd15_depth"
         controlnet = ControlNetModel.from_pretrained(controlnet_model_path, torch_dtype=torch.float16)
         logger.info("Loading SDXL base pipeline...")
@@ -90,6 +90,8 @@ def initialize_pipelines():
             pipe.scheduler.config, 
             timestep_spacing="trailing"
         )
+        pipe.enable_model_cpu_offload()
+        pipe.enable_vae_slicing()
         ip_model = IPAdapterFaceIDPlusXL(pipe, ip_ckpt, "cuda")
 
 
