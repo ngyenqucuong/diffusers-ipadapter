@@ -66,7 +66,7 @@ def initialize_pipelines():
             subfolder=[ "sdxl_models",""],
             weight_name=[
                 "ip-adapter_sdxl_vit-h.safetensors",
-                "ip-adapter-faceid-plusv2_sdxl_lora.bin"
+                "ip-adapter-faceid-plusv2_sdxl.bin"
             ],
             image_encoder_folder=None,
         )
