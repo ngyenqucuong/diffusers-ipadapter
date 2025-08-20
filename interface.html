@@ -282,9 +282,9 @@
             formData.append('controlnet_conditioning_scale', document.getElementById('controlnetScale').value);
             formData.append('guidance_scale', document.getElementById('guidanceScale').value);
             formData.append('detail_face', document.getElementById('detailFace').checked);
-            formData.append('seed', seedValue);
-            
-            
+            formData.append('seed', document.getElementById('generateSeed').value);
+
+
             try {
                 const response = await fetch(`/img2img`, {
                     method: 'POST',
