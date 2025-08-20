@@ -60,16 +60,18 @@ def initialize_pipelines():
             image_encoder=image_encoder,
         ).to("cuda")
         pipe.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
-
+        
         pipe.load_ip_adapter(
-            "h94/IP-Adapter",
-            subfolder="sdxl_models",
-            weight_name=["ip-adapter-plus_sdxl_vit-h.safetensors", "ip-adapter-plus-face_sdxl_vit-h.safetensors"]
+            [ "h94/IP-Adapter", "h94/IP-Adapter-FaceID"],
+            subfolder=[ "sdxl_models",""],
+            weight_name=[
+                "ip-adapter_sdxl_vit-h.safetensors",
+                "ip-adapter-faceid-plusv2_sdxl_lora.safetensors"
+            ],
+            image_encoder_folder=None,
         )
-        
-        
         pipe.enable_model_cpu_offload()
-        apply_hidiffusion(pipe)   
+        # apply_hidiffusion(pipe)   
         
     except Exception as e:
         logger.error(f"Failed to initialize pipelines: {e}")
