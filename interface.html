@@ -282,11 +282,8 @@
             formData.append('controlnet_conditioning_scale', document.getElementById('controlnetScale').value);
             formData.append('guidance_scale', document.getElementById('guidanceScale').value);
             formData.append('detail_face', document.getElementById('detailFace').checked);
-
-            const seedValue = document.getElementById('generateSeed').value;
-            if (seedValue && seedValue !== '0') {
-                formData.append('seed', seedValue);
-            }
+            formData.append('seed', seedValue);
+            
             
             try {
                 const response = await fetch(`/img2img`, {
@@ -456,7 +453,7 @@
                 }
             })
             .catch(error => {
-                alert('Cannot connect to API server. Please make sure the backend is running on http://localhost:8000');
+                alert('Cannot connect to API server. Please make sure the backend is running on http://localhost:8888');
             });
     </script>
 </body>
