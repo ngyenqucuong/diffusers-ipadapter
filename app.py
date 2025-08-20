@@ -67,7 +67,7 @@ def initialize_pipelines():
             weight_name=["ip-adapter-plus_sdxl_vit-h.safetensors", "ip-adapter-plus-face_sdxl_vit-h.safetensors"]
         )
         
-        pipe.set_ip_adapter_scale([0.7, 0.3])
+        
         pipe.enable_model_cpu_offload()
         apply_hidiffusion(pipe)   
         
@@ -129,7 +129,7 @@ os.makedirs(results_dir, exist_ok=True)
 
 async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Image,request: Img2ImgRequest):
     negative_prompt = f"{request.negative_prompt},monochrome, lowres, bad anatomy, worst quality, low quality"
-    
+    pipe.set_ip_adapter_scale([request.strength,request.ip_adapter_scale])
     generated_image = pipe(
         ip_adapter_image=[pose_image, face_image],
         prompt=request.prompt,
