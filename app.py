@@ -6,8 +6,9 @@ from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 from typing import Optional
 import torch
-from diffusers import  StableDiffusionControlNetInpaintPipeline,AutoencoderKL, UNet2DConditionModel, EulerDiscreteScheduler
-from diffusers.models import ControlNetModel
+from diffusers import  AutoPipelineForText2Image,DDIMScheduler
+from transformers import CLIPVisionModelWithProjection
+
 
 from PIL import Image ,ImageDraw
 import numpy as np
@@ -19,15 +20,14 @@ from datetime import datetime
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import logging
-from insightface.app import FaceAnalysis
 from contextlib import asynccontextmanager
-from safetensors.torch import load_file
-from ip_adapter.ip_adapter_faceid import IPAdapterFaceIDPlusXL
 
-from huggingface_hub import hf_hub_download, snapshot_download
+from hidiffusion import apply_hidiffusion, remove_hidiffusion
 
 
-import cv2
+
+
+
 
 
 # Setup logging
@@ -36,65 +36,40 @@ logger = logging.getLogger(__name__)
 
 # Global variables for pipelines
 pipe = None
-face_analysis_app = None
 executor = ThreadPoolExecutor(max_workers=1)
-ip_model = None
+processor = None
 
-snapshot_download(
-    repo_id="h94/IP-Adapter", allow_patterns="models/image_encoder/*", local_dir="."
-)
+
 
 def initialize_pipelines():
     """Initialize the diffusion pipelines with InstantID and SDXL-Lightning - GPU optimized"""
-    global pipe, face_analysis_app,ip_model
+    global pipe
     
     try:
         # Clear CUDA cache before initialization
        
         logger.info("Loading face analysis model...")
-        face_analysis_app = FaceAnalysis(name='buffalo_l', providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
-        face_analysis_app.prepare(ctx_id=0, det_size=(640, 640))
         
-        # Path to InstantID models
-        
-        
-        # Load ControlNet
-        logger.info("Loading ControlNet...")        
-        # SDXL-Lightning LoRA path
-        repo = "ByteDance/SDXL-Lightning"
-        # Load SDXL-Lightning LoRA
-        ckpt = "sdxl_lightning_4step_unet.safetensors"
-        # Base model path
-        base_model_path = "stabilityai/stable-diffusion-xl-base-1.0"
-        ip_ckpt = hf_hub_download(repo_id="h94/IP-Adapter-FaceID", filename="ip-adapter-faceid-plusv2_sdxl.bin")
-        controlnet_model_path = "lllyasviel/control_v11f1p_sd15_depth"
-        controlnet = ControlNetModel.from_pretrained(controlnet_model_path, torch_dtype=torch.float16)
-        logger.info("Loading SDXL base pipeline...")
-        vae_model_path = "stabilityai/sd-vae-ft-mse"
-        vae = AutoencoderKL.from_pretrained(vae_model_path).to(dtype=torch.float16)
-        unet = UNet2DConditionModel.from_config(base_model_path, subfolder="unet").to("cuda", torch.float16)
-        unet.load_state_dict(load_file(hf_hub_download(repo, ckpt), device="cuda"))
-        image_encoder_path = "models/image_encoder"
+        image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+            "h94/IP-Adapter", subfolder="models/image_encoder", torch_dtype=torch.float16
+        ).to("cuda")
 
-        
-        pipe = StableDiffusionControlNetInpaintPipeline.from_pretrained(
-            base_model_path,
+        pipe = AutoPipelineForText2Image.from_pretrained(
+            "stabilityai/stable-diffusion-xl-base-1.0",
             torch_dtype=torch.float16,
-            unet=unet,
-            vae=vae,
-            variant="fp16",
-            feature_extractor=None,
-            controlnet=controlnet,
-            safety_checker=None
-        )
-        pipe.scheduler = EulerDiscreteScheduler.from_config(
-            pipe.scheduler.config, 
-            timestep_spacing="trailing"
-        )
-        ip_model = IPAdapterFaceIDPlusXL(pipe,image_encoder_path ,ip_ckpt, "cuda")
+            image_encoder=image_encoder,
+        ).to("cuda")
+        pipe.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
 
-
+        pipe.load_ip_adapter(
+            "h94/IP-Adapter",
+            subfolder="sdxl_models",
+            weight_name=["ip-adapter-plus_sdxl_vit-h.safetensors", "ip-adapter-plus-face_sdxl_vit-h.safetensors"]
+        )
         
+        pipe.set_ip_adapter_scale([0.7, 0.3])
+        pipe.enable_model_cpu_offload()
+        apply_hidiffusion(pipe)   
         
     except Exception as e:
         logger.error(f"Failed to initialize pipelines: {e}")
@@ -152,29 +127,17 @@ jobs = {}
 results_dir = "results"
 os.makedirs(results_dir, exist_ok=True)
 
-async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Image,mask_image: Image.Image,request: Img2ImgRequest):
-    negative_prompt = f"{request.negative_prompt}, blue artifacts, color bleeding, unnatural colors, mask edges, visible seams, hair"
-    seed = request.seed if request.seed else torch.randint(0, 2**32, (1,)).item()
-    cv2image = cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR)
-    faces = face_analysis_app.get(cv2image)
-    if len(faces) == 0:
-        raise HTTPException(status_code=400, detail="No face detected in the provided image")
-    faceid_embeds = torch.from_numpy(faces[0].normed_embedding).unsqueeze(0)
-    pose_image_cv2  = np.array(pose_image)
-
-
-
-    canny_image = cv2.Canny(pose_image_cv2, 100, 200)
-    canny_image = canny_image[:, :, None]
-    canny_image = np.concatenate([canny_image, canny_image, canny_image], axis=2)
-    canny_image = Image.fromarray(canny_image)
-
-    generated_image = ip_model.generate( num_samples=1, faceid_embeds=faceid_embeds,negative_prompt=negative_prompt, num_inference_steps=request.num_inference_steps,style_image=pose_image,
-                           seed=seed, image=pose_image,control_image=canny_image, mask_image=mask_image, strength=request.strength)[0]
+async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Image,request: Img2ImgRequest):
+    negative_prompt = f"{request.negative_prompt},monochrome, lowres, bad anatomy, worst quality, low quality"
     
-
-    # if request.detail_face:
-    #     generated_image = detail_face(generated_image, face_image)
+    generated_image = pipe(
+        ip_adapter_image=[pose_image, face_image],
+        prompt=request.prompt,
+        negative_prompt=negative_prompt,
+        num_inference_steps=request.num_inference_steps,
+        generator = torch.Generator(device="cuda").manual_seed(request.seed),
+        num_images_per_prompt=1,
+    ).images[0]
     filename = f"{job_id}_base.png"
     filepath = os.path.join(results_dir, filename)
     generated_image.save(filepath)
@@ -182,7 +145,7 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
     metadata = {
         "job_id": job_id,
         "type": "head_swap",
-        "seed": seed,
+        "seed": request.seed,
         "prompt": request.prompt,
         "parameters": request.dict(),
         "filename": filename,
@@ -250,7 +213,6 @@ async def health_check():
         "cuda_available": torch.cuda.is_available(),
         "pipeline_device": pipeline_device,
         "pipelines_loaded": pipe is not None,
-        "face_analysis_loaded": face_analysis_app is not None,
         "gpu_info": gpu_info
     }
 
@@ -259,7 +221,6 @@ async def health_check():
 async def img2img(
     base_image: UploadFile = File(...),
     pose_image: UploadFile = File(...),
-    mask_image: UploadFile = File(...),
     prompt: str = Form(""),
     negative_prompt: str = Form("(lowres, low quality, worst quality:1.2), (text:1.2), watermark, painting, drawing, illustration, glitch, deformed, mutated, cross-eyed, ugly, disfigured"),
     strength: float = Form(0.85),
@@ -284,7 +245,6 @@ async def img2img(
     # Load images
         base_img = Image.open(io.BytesIO(await base_image.read())).resize((256, 256))
         pose_img = Image.open(io.BytesIO(await pose_image.read())).resize((512, 768))
-        mask_img = Image.open(io.BytesIO(await mask_image.read())).resize((512, 768))
         request = Img2ImgRequest(
 
             prompt=prompt,
@@ -301,7 +261,7 @@ async def img2img(
         # Start background task
         loop = asyncio.get_event_loop()
         loop.run_in_executor(executor, lambda: asyncio.run(
-            gen_img2img(job_id, base_img, pose_img, mask_img, request)
+            gen_img2img(job_id, base_img, pose_img, request)
         ))
         
         return {"job_id": job_id, "status": "pending"}

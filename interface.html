@@ -104,18 +104,7 @@
                             </div>
                         </div>
                     </div>
-                    <div>
-                        <label class="block text-white font-medium mb-2">Mask Image</label>
-                        <div class="upload-area p-6 text-center cursor-pointer" onclick="document.getElementById('maskImage').click()">
-                            <input type="file" id="maskImage" accept="image/*" class="hidden">
-                            <div id="maskImagePreview" class="hidden">
-                                <img id="maskImageImg" class="max-w-full h-32 object-cover rounded-lg mx-auto">
-                            </div>
-                            <div id="maskImagePlaceholder">
-                                <p class="text-white">📷 Click to upload mask image</p>
-                            </div>
-                        </div>
-                    </div>
+                    
                 </div>
 
                 <!-- Prompt -->
@@ -234,11 +223,7 @@
         const posePreview = document.getElementById('poseImagePreview');
         const posePlaceholder = document.getElementById('poseImagePlaceholder');
         const poseImg = document.getElementById('poseImageImg');
-        const maskInput = document.getElementById('maskImage');
-        const maskPreview = document.getElementById('maskImagePreview');
-
-        const maskPlaceholder = document.getElementById('maskImagePlaceholder');
-        const maskImg = document.getElementById('maskImageImg');
+        
 
         baseInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
@@ -264,24 +249,12 @@
                 reader.readAsDataURL(file);
             }
         });
-        maskInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    maskImg.src = e.target.result;
-                    maskPreview.classList.remove('hidden');
-                    maskPlaceholder.classList.add('hidden');
-                };
-                reader.readAsDataURL(file);
-            }
-        });
+       
         
         // Generate button event listener
         document.getElementById('generateBtn').addEventListener('click', async () => {
             const baseImageFile = document.getElementById('baseImage').files[0];
             const poseImageFile = document.getElementById('poseImage').files[0];
-            const maskImageFile = document.getElementById('maskImage').files[0];
             const prompt = document.getElementById('Prompt').value;
             
             if (!baseImageFile) {
@@ -293,10 +266,7 @@
                 alert('Please upload a pose image');
                 return;
             }
-            if (!maskImageFile) {
-                alert('Please upload a mask image');
-                return;
-            }
+           
             if (!prompt.trim()) {
                 alert('Please enter a prompt');
                 return;
@@ -305,7 +275,6 @@
             const formData = new FormData();
             formData.append('base_image', baseImageFile);
             formData.append('pose_image', poseImageFile);
-            formData.append('mask_image', maskImageFile);
             formData.append('prompt', prompt);
             formData.append('ip_adapter_scale', document.getElementById('adapterScale').value);
             formData.append('strength', document.getElementById('Strength').value);
