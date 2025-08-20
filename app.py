@@ -66,10 +66,11 @@ def initialize_pipelines():
             subfolder=[ "sdxl_models",""],
             weight_name=[
                 "ip-adapter_sdxl_vit-h.safetensors",
-                "ip-adapter-faceid-plusv2_sdxl_lora.safetensors"
+                "ip-adapter-faceid-plusv2_sdxl_lora.bin"
             ],
             image_encoder_folder=None,
         )
+        
         pipe.enable_model_cpu_offload()
         # apply_hidiffusion(pipe)   
         
