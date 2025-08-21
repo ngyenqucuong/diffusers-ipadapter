@@ -130,12 +130,15 @@ os.makedirs(results_dir, exist_ok=True)
 async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Image,request: Img2ImgRequest):
     negative_prompt = f"{request.negative_prompt},monochrome, lowres, bad anatomy, worst quality, low quality"
     pipe.set_ip_adapter_scale([request.strength,request.ip_adapter_scale])
+    seed = request.seed
+    if not request.seed:
+        seed = torch.randint(0, 2**32, (1,), device="cuda").item()
     generated_image = pipe(
         ip_adapter_image=[pose_image, face_image],
         prompt=request.prompt,
         negative_prompt=negative_prompt,
         num_inference_steps=request.num_inference_steps,
-        generator = torch.Generator(device="cuda").manual_seed(request.seed),
+        generator = torch.Generator(device="cuda").manual_seed(seed),
         num_images_per_prompt=1,
     ).images[0]
     filename = f"{job_id}_base.png"
@@ -145,7 +148,7 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
     metadata = {
         "job_id": job_id,
         "type": "head_swap",
-        "seed": request.seed,
+        "seed": seed,
         "prompt": request.prompt,
         "parameters": request.dict(),
         "filename": filename,
