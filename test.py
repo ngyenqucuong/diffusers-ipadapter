@@ -69,8 +69,8 @@ def initialize_pipelines():
         ).to("cuda")
         pipe.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
         
-        pipe.load_ip_adapter("h94/IP-Adapter-FaceID", subfolder=None, weight_name="ip-adapter-faceid-plusv2_sdxl.bin")
-        pipe.load_lora_weights(hf_hub_download("h94/IP-Adapter-FaceID", "ip-adapter-faceid-plusv2_sdxl_lora.safetensors"))
+        pipe.load_ip_adapter("h94/IP-Adapter", subfolder=None, weight_name="ip-adapter-faceid-plusv2_sdxl.bin")
+        # pipe.load_lora_weights(hf_hub_download("h94/IP-Adapter-FaceID", "ip-adapter-faceid-plusv2_sdxl_lora.safetensors"))
         pipe.fuse_lora()
         pipe.enable_model_cpu_offload()
         apply_hidiffusion(pipe)   

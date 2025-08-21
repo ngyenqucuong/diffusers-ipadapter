@@ -6,11 +6,11 @@ from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 from typing import Optional
 import torch
+from diffusers import  AutoPipelineForText2Image,DDIMScheduler
+from transformers import CLIPVisionModelWithProjection
 
-from pipeline_stable_diffusion_xl_instantid import StableDiffusionXLInstantIDPipeline, draw_kps
-from diffusers.models import ControlNetModel, UNet2DConditionModel
-from diffusers import EulerDiscreteScheduler
-from PIL import Image 
+
+from PIL import Image ,ImageDraw
 import numpy as np
 import io
 import json
@@ -21,33 +21,14 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import logging
 from contextlib import asynccontextmanager
-from transformers import CLIPVisionModelWithProjection
-
-from safetensors.torch import load_file
 
 from hidiffusion import apply_hidiffusion, remove_hidiffusion
-from huggingface_hub import snapshot_download,hf_hub_download
+
 
 from insightface.app import FaceAnalysis
 
-import cv2
 
-if not os.path.exists("./models/antelopev2/"):
-    snapshot_download(
-        repo_id="InstantX/InstantID", allow_patterns="/models/antelopev2/*", local_dir="./models/antelopev2/"
-    )
-    # run 'mv models/antelopev2/antelopev2/* models/antelopev2/' cmd
-    os.system("mv models/antelopev2/antelopev2/* models/antelopev2/")
 
-if not os.path.exists("./checkpoints/"):
-    snapshot_download(
-        repo_id="InstantX/InstantID", allow_patterns="/ControlNetModel/*", local_dir="./checkpoints/"
-    )
-    hf_hub_download(
-        repo_id="InstantX/InstantID",
-        filename="ip-adapter.bin",
-        local_dir="./checkpoints"
-    )
 
 
 # Setup logging
@@ -59,72 +40,36 @@ pipe = None
 executor = ThreadPoolExecutor(max_workers=1)
 processor = None
 
-face_analysis_app = None
 
-def resize_img(input_image, max_side=1280, min_side=1024, size=None, 
-               pad_to_max_side=False, mode=Image.BILINEAR, base_pixel_number=64):
-
-    w, h = input_image.size
-    if size is not None:
-        w_resize_new, h_resize_new = size
-    else:
-        ratio = min_side / min(h, w)
-        w, h = round(ratio*w), round(ratio*h)
-        ratio = max_side / max(h, w)
-        input_image = input_image.resize([round(ratio*w), round(ratio*h)], mode)
-        w_resize_new = (round(ratio * w) // base_pixel_number) * base_pixel_number
-        h_resize_new = (round(ratio * h) // base_pixel_number) * base_pixel_number
-    input_image = input_image.resize([w_resize_new, h_resize_new], mode)
-
-    if pad_to_max_side:
-        res = np.ones([max_side, max_side, 3], dtype=np.uint8) * 255
-        offset_x = (max_side - w_resize_new) // 2
-        offset_y = (max_side - h_resize_new) // 2
-        res[offset_y:offset_y+h_resize_new, offset_x:offset_x+w_resize_new] = np.array(input_image)
-        input_image = Image.fromarray(res)
-    return input_image
 
 def initialize_pipelines():
     """Initialize the diffusion pipelines with InstantID and SDXL-Lightning - GPU optimized"""
-    global pipe, face_analysis_app
+    global pipe
     
     try:
         # Clear CUDA cache before initialization
        
         logger.info("Loading face analysis model...")
-        face_analysis_app = FaceAnalysis(name='antelopev2', root='./', providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
-        face_analysis_app.prepare(ctx_id=0, det_size=(640, 640))
-        face_adapter = f'./checkpoints/ip-adapter.bin'
-        controlnet_path = f'./checkpoints/ControlNetModel'
-        controlnet = ControlNetModel.from_pretrained(controlnet_path, torch_dtype=torch.float16)
+        
         image_encoder = CLIPVisionModelWithProjection.from_pretrained(
-                "h94/IP-Adapter",  # Giữ nguyên nếu image_encoder chưa tải local, hoặc thay bằng local path nếu có
-                subfolder="models/image_encoder",
-                torch_dtype=torch.float16,
-            ).to("cuda")
-        # repo = "ByteDance/SDXL-Lightning"
-        # ckpt = "sdxl_lightning_4step_unet.safetensors"
-        # unet = UNet2DConditionModel.from_config("stabilityai/stable-diffusion-xl-base-1.0", subfolder="unet").to("cuda", torch.float16)
-        # unet.load_state_dict(load_file(hf_hub_download(repo, ckpt), device="cuda"))
-        pipe = StableDiffusionXLInstantIDPipeline.from_pretrained(
+            "h94/IP-Adapter", subfolder="models/image_encoder", torch_dtype=torch.float16
+        ).to("cuda")
+
+        pipe = AutoPipelineForText2Image.from_pretrained(
             "stabilityai/sd-turbo",
-            controlnet=controlnet,
             torch_dtype=torch.float16,
             image_encoder=image_encoder,
-            # unet=unet
+        ).to("cuda")
+        pipe.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
+        
+        pipe.load_ip_adapter(
+            "h94/IP-Adapter",
+            subfolder="sdxl_models",
+            weight_name=["ip-adapter-plus_sdxl_vit-h.safetensors", "ip-adapter-plus-face_sdxl_vit-h.safetensors"]
         )
-        pipe.cuda()
-        # pipe.enable_xformers_memory_efficient_attention()
-        # pipe.enable_vae_slicing()
-
-        pipe.load_ip_adapter_instantid(face_adapter)
-
-        # pipe.scheduler = EulerDiscreteScheduler.from_config(pipe.scheduler.config, timestep_spacing="trailing")
-
-
-        # pipe.image_proj_model.to("cuda")
-        # pipe.unet.to("cuda")
+        
         pipe.enable_model_cpu_offload()
+        apply_hidiffusion(pipe)   
         
     except Exception as e:
         logger.error(f"Failed to initialize pipelines: {e}")
@@ -182,49 +127,17 @@ jobs = {}
 results_dir = "results"
 os.makedirs(results_dir, exist_ok=True)
 
-
-
 async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Image,request: Img2ImgRequest):
     negative_prompt = f"{request.negative_prompt},monochrome, lowres, bad anatomy, worst quality, low quality"
-    # pipe.set_ip_adapter_scale([request.strength,request.ip_adapter_scale])
-
-    cv2_face_image = cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR)
-    pose_image_cv2 =  cv2.cvtColor(np.array(pose_image), cv2.COLOR_RGB2BGR)
-
-
-    faces = face_analysis_app.get(cv2_face_image)
-    face_info = max(faces, key=lambda x: (x["bbox"][2] - x["bbox"][0]) * (x["bbox"][3] - x["bbox"][1]))
-    face_emb = face_info["embedding"]
-    
-    pose_faces = face_analysis_app.get(pose_image_cv2)
-    pose_info = max(pose_faces, key=lambda x: (x["bbox"][2] - x["bbox"][0]) * (x["bbox"][3] - x["bbox"][1]))
-    pose_kps = draw_kps(pose_image, pose_info["kps"])
-
-    width, height = pose_kps.size
-    control_mask = np.zeros([height, width, 3])
-    x1, y1, x2, y2 = face_info["bbox"]
-    x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-    control_mask[y1:y2, x1:x2] = 255
-    control_mask = Image.fromarray(control_mask.astype(np.uint8))
-    seed = request.seed
-    if not request.seed:
-        seed = torch.randint(0, 2**32, (1,), dtype=torch.int64).item()
-    generator = torch.Generator(device='cuda').manual_seed(seed)
+    pipe.set_ip_adapter_scale([request.strength,request.ip_adapter_scale])
     generated_image = pipe(
+        ip_adapter_image=[pose_image, face_image],
         prompt=request.prompt,
         negative_prompt=negative_prompt,
-        image_embeds=face_emb,
-        image=pose_kps,
-        control_mask=control_mask,
-        controlnet_conditioning_scale=request.controlnet_conditioning_scale,
         num_inference_steps=request.num_inference_steps,
-        guidance_scale=0,
-        height=height,
-        width=width,
-        generator=generator,
-        num_images_per_prompt=1
+        generator = torch.Generator(device="cuda").manual_seed(request.seed),
+        num_images_per_prompt=1,
     ).images[0]
-    
     filename = f"{job_id}_base.png"
     filepath = os.path.join(results_dir, filename)
     generated_image.save(filepath)
@@ -232,7 +145,7 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
     metadata = {
         "job_id": job_id,
         "type": "head_swap",
-        "seed": seed,
+        "seed": request.seed,
         "prompt": request.prompt,
         "parameters": request.dict(),
         "filename": filename,
