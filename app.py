@@ -8,8 +8,8 @@ from typing import Optional
 import torch
 
 from pipeline_stable_diffusion_xl_instantid import StableDiffusionXLInstantIDPipeline, draw_kps
-from diffusers.models import ControlNetModel
-from diffusers import LCMScheduler
+from diffusers.models import ControlNetModel, UNet2DConditionModel
+from diffusers import EulerDiscreteScheduler
 from PIL import Image 
 import numpy as np
 import io
@@ -21,6 +21,9 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import logging
 from contextlib import asynccontextmanager
+from transformers import CLIPVisionModelWithProjection
+
+from safetensors.torch import load_file
 
 from hidiffusion import apply_hidiffusion, remove_hidiffusion
 from huggingface_hub import snapshot_download,hf_hub_download
@@ -94,18 +97,29 @@ def initialize_pipelines():
         face_adapter = f'./checkpoints/ip-adapter.bin'
         controlnet_path = f'./checkpoints/ControlNetModel'
         controlnet = ControlNetModel.from_pretrained(controlnet_path, torch_dtype=torch.float16)
+        image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+                "h94/IP-Adapter",  # Giữ nguyên nếu image_encoder chưa tải local, hoặc thay bằng local path nếu có
+                subfolder="models/image_encoder",
+                torch_dtype=torch.float16,
+            ).to("cuda")
+        repo = "ByteDance/SDXL-Lightning"
+        ckpt = "sdxl_lightning_4step_unet.safetensors"
+        unet = UNet2DConditionModel.from_config("stabilityai/stable-diffusion-xl-base-1.0", subfolder="unet").to("cuda", torch.float16)
+        unet.load_state_dict(load_file(hf_hub_download(repo, ckpt), device="cuda"))
         pipe = StableDiffusionXLInstantIDPipeline.from_pretrained(
             "stabilityai/stable-diffusion-xl-base-1.0",
             controlnet=controlnet,
             torch_dtype=torch.float16,
+            image_encoder=image_encoder,
+            unet=unet
         )
         pipe.cuda()
+        pipe.enable_xformers_memory_efficient_attention()
+        pipe.enable_vae_slicing()
 
         pipe.load_ip_adapter_instantid(face_adapter)
 
-        pipe.load_lora_weights("latent-consistency/lcm-lora-sdxl")
-        pipe.fuse_lora()
-        pipe.scheduler = LCMScheduler.from_config(pipe.scheduler.config)
+        pipe.scheduler = EulerDiscreteScheduler.from_config(pipe.scheduler.config, timestep_spacing="trailing")
 
 
         # pipe.image_proj_model.to("cuda")
