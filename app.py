@@ -102,16 +102,16 @@ def initialize_pipelines():
                 subfolder="models/image_encoder",
                 torch_dtype=torch.float16,
             ).to("cuda")
-        # repo = "ByteDance/SDXL-Lightning"
-        # ckpt = "sdxl_lightning_4step_unet.safetensors"
-        # unet = UNet2DConditionModel.from_config("stabilityai/stable-diffusion-xl-base-1.0", subfolder="unet").to("cuda", torch.float16)
-        # unet.load_state_dict(load_file(hf_hub_download(repo, ckpt), device="cuda"))
+        repo = "ByteDance/SDXL-Lightning"
+        ckpt = "sdxl_lightning_4step_unet.safetensors"
+        unet = UNet2DConditionModel.from_config("stabilityai/stable-diffusion-xl-base-1.0", subfolder="unet").to("cuda", torch.float16)
+        unet.load_state_dict(load_file(hf_hub_download(repo, ckpt), device="cuda"))
         pipe = StableDiffusionXLInstantIDPipeline.from_pretrained(
             "stabilityai/stable-diffusion-xl-base-1.0",
             controlnet=controlnet,
             torch_dtype=torch.float16,
             image_encoder=image_encoder,
-            # unet=unet
+            unet=unet
         )
         pipe.cuda()
         # pipe.enable_xformers_memory_efficient_attention()
@@ -119,11 +119,11 @@ def initialize_pipelines():
 
         pipe.load_ip_adapter_instantid(face_adapter)
 
-        # pipe.scheduler = EulerDiscreteScheduler.from_config(pipe.scheduler.config, timestep_spacing="trailing")
+        pipe.scheduler = EulerDiscreteScheduler.from_config(pipe.scheduler.config, timestep_spacing="trailing")
 
 
-        # pipe.image_proj_model.to("cuda")
-        # pipe.unet.to("cuda")
+        pipe.image_proj_model.to("cuda")
+        pipe.unet.to("cuda")
         pipe.enable_model_cpu_offload()
         
     except Exception as e:
