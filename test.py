@@ -63,7 +63,7 @@ def initialize_pipelines():
         ).to("cuda")
 
         pipe = AutoPipelineForText2Image.from_pretrained(
-            "stabilityai/stable-diffusion-xl-base-1.0",
+            "stabilityai/sd-turbo",
             torch_dtype=torch.float16,
             image_encoder=image_encoder,
         ).to("cuda")
