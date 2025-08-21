@@ -161,14 +161,14 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
     ip_adapter_images = []
     cv2_face_image = cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR)
     faces = app.get(cv2_face_image)
-    ip_adapter_images.append(face_align.norm_crop(image, landmark=faces[0].kps, image_size=224))
+    ip_adapter_images.append(face_align.norm_crop(cv2_face_image, landmark=faces[0].kps, image_size=224))
     faceimage = torch.from_numpy(faces[0].normed_embedding)
     ref_images_embeds.append(faceimage.unsqueeze(0))
     ref_images_embeds = torch.stack(ref_images_embeds, dim=0).unsqueeze(0)
     neg_ref_images_embeds = torch.zeros_like(ref_images_embeds)
     id_embeds = torch.cat([neg_ref_images_embeds, ref_images_embeds]).to(dtype=torch.float16, device="cuda")
-    clip_embeds = pipe.prepare_ip_adapter_image_embeds(
-                [face_image], None, torch.device("cuda"), 1, True)[0]
+    clip_embeds = pipe.prepare_ip_adapter_image_embeds([ip_adapter_images], None, torch.device("cuda"), 1, True)[0]
+
     pipe.unet.encoder_hid_proj.image_projection_layers[0].clip_embeds = clip_embeds.to(dtype=torch.float16)
     pipe.unet.encoder_hid_proj.image_projection_layers[0].shortcut = False
     generated_image = pipe(
