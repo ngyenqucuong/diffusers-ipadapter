@@ -111,7 +111,7 @@ def initialize_pipelines():
             controlnet=controlnet,
             torch_dtype=torch.float16,
             image_encoder=image_encoder,
-            unet=unet
+            # unet=unet
         )
         pipe.cuda()
         # pipe.enable_xformers_memory_efficient_attention()
@@ -125,7 +125,6 @@ def initialize_pipelines():
         # pipe.image_proj_model.to("cuda")
         # pipe.unet.to("cuda")
         pipe.enable_model_cpu_offload()
-        apply_hidiffusion(pipe)   
         
     except Exception as e:
         logger.error(f"Failed to initialize pipelines: {e}")
