@@ -107,7 +107,7 @@ def initialize_pipelines():
         # unet = UNet2DConditionModel.from_config("stabilityai/stable-diffusion-xl-base-1.0", subfolder="unet").to("cuda", torch.float16)
         # unet.load_state_dict(load_file(hf_hub_download(repo, ckpt), device="cuda"))
         pipe = StableDiffusionXLInstantIDPipeline.from_pretrained(
-            "stabilityai/sd-turbo",
+            "stabilityai/stable-diffusion-xl-base-1.0",
             controlnet=controlnet,
             torch_dtype=torch.float16,
             image_encoder=image_encoder,
