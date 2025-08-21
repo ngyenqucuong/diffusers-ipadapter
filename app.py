@@ -206,7 +206,7 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
         image_embeds=face_emb,
         image=pose_kps,
         control_mask=control_mask,
-        controlnet_conditioning_scale=request.controlnet_conditioning_scale,
+        controlnet_conditioning_scale=0.8,
         num_inference_steps=request.num_inference_steps,
         guidance_scale=request.guidance_scale,
         height=height,
