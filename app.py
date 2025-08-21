@@ -165,16 +165,19 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
     id_embeds = torch.cat([neg_ref_images_embeds, ref_images_embeds]).to(dtype=torch.float16, device="cuda")
     clip_embeds = pipe.prepare_ip_adapter_image_embeds(
         [facealign_pil,facealign_pil], None, torch.device("cuda"), 1, True
-    )[0]
+    )
     seed = request.seed 
     if not request.seed:
         seed = torch.randint(0, 2**32, (1,), dtype=torch.int64).item()
 
-    pipe.unet.encoder_hid_proj.image_projection_layers[0].clip_embeds = clip_embeds.to(dtype=torch.float16)
+    pipe.unet.encoder_hid_proj.image_projection_layers[0].clip_embeds = clip_embeds[0].to(dtype=torch.float16)
     pipe.unet.encoder_hid_proj.image_projection_layers[0].shortcut = False
+    pipe.unet.encoder_hid_proj.image_projection_layers[1].clip_embeds = clip_embeds[1].to(dtype=torch.float16)
+    pipe.unet.encoder_hid_proj.image_projection_layers[1].shortcut = True
+
     generated_image = pipe(
         ip_adapter_image=[facealign_pil], 
-        ip_adapter_image_embeds=[None, id_embeds],
+        ip_adapter_image_embeds=[id_embeds],
         prompt=request.prompt,
         negative_prompt=negative_prompt,
         num_inference_steps=request.num_inference_steps,
