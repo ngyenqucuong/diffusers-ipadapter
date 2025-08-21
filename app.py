@@ -59,7 +59,7 @@ def initialize_pipelines():
         face_analysis_app.prepare(ctx_id=0, det_size=(640, 640))
 
         image_encoder = CLIPVisionModelWithProjection.from_pretrained(
-            "h94/IP-Adapter", subfolder="models/image_encoder", torch_dtype=torch.float16
+            "laion/CLIP-ViT-H-14-laion2B-s32B-b79K"
         ).to("cuda")
 
         pipe = AutoPipelineForText2Image.from_pretrained(
