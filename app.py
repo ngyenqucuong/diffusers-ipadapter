@@ -25,7 +25,6 @@ from transformers import CLIPVisionModelWithProjection
 
 from safetensors.torch import load_file
 
-from hidiffusion import apply_hidiffusion, remove_hidiffusion
 from huggingface_hub import snapshot_download,hf_hub_download
 
 from insightface.app import FaceAnalysis
@@ -122,8 +121,8 @@ def initialize_pipelines():
         pipe.scheduler = EulerDiscreteScheduler.from_config(pipe.scheduler.config, timestep_spacing="trailing")
 
 
-        pipe.image_proj_model.to("cuda")
-        pipe.unet.to("cuda")
+        # pipe.image_proj_model.to("cuda")
+        # pipe.unet.to("cuda")
         pipe.enable_model_cpu_offload()
         
     except Exception as e:
