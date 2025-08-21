@@ -99,11 +99,15 @@ def initialize_pipelines():
             controlnet=controlnet,
             torch_dtype=torch.float16,
         )
+        pipe.cuda()
+
         pipe.load_ip_adapter_instantid(face_adapter)
+
+        pipe.load_lora_weights("latent-consistency/lcm-lora-sdxl")
+        pipe.fuse_lora()
         pipe.scheduler = LCMScheduler.from_config(pipe.scheduler.config)
 
-        # pipe.load_lora_weights("latent-consistency/lcm-lora-sdxl")
-        pipe.cuda()
+
         # pipe.image_proj_model.to("cuda")
         # pipe.unet.to("cuda")
         pipe.enable_model_cpu_offload()
