@@ -27,22 +27,25 @@ from hidiffusion import apply_hidiffusion, remove_hidiffusion
 from huggingface_hub import snapshot_download,hf_hub_download
 
 from insightface.app import FaceAnalysis
-from insightface.utils import face_align
 
 import cv2
 
+if not os.path.exists("./models/antelopev2/"):
+    snapshot_download(
+        repo_id="InstantX/InstantID", allow_patterns="/models/antelopev2/*", local_dir="./models/antelopev2/"
+    )
+    # run 'mv models/antelopev2/antelopev2/* models/antelopev2/' cmd
+    os.system("mv models/antelopev2/antelopev2/* models/antelopev2/")
 
-snapshot_download(
-    repo_id="InstantX/InstantID", allow_patterns="/models/antelopev2/*", local_dir="./models/antelopev2/"
-)
-snapshot_download(
-    repo_id="InstantX/InstantID", allow_patterns="/ControlNetModel/*", local_dir="./checkpoints/"
-)
-hf_hub_download(
-    repo_id="InstantX/InstantID",
-    filename="ip-adapter.bin",
-    local_dir="./checkpoints"
-)
+if not os.path.exists("./checkpoints/"):
+    snapshot_download(
+        repo_id="InstantX/InstantID", allow_patterns="/ControlNetModel/*", local_dir="./checkpoints/"
+    )
+    hf_hub_download(
+        repo_id="InstantX/InstantID",
+        filename="ip-adapter.bin",
+        local_dir="./checkpoints"
+    )
 
 
 # Setup logging
