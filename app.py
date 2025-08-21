@@ -125,7 +125,7 @@ def initialize_pipelines():
         # pipe.image_proj_model.to("cuda")
         # pipe.unet.to("cuda")
         pipe.enable_model_cpu_offload()
-        # apply_hidiffusion(pipe)   
+        apply_hidiffusion(pipe)   
         
     except Exception as e:
         logger.error(f"Failed to initialize pipelines: {e}")
