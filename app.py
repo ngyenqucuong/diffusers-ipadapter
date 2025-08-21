@@ -162,6 +162,7 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
     if not request.seed:
         seed = torch.randint(0, 2**32, (1,), dtype=torch.int64).item()
 
+    pipe.unet.encoder_hid_proj.image_projection_layers[0].clip_embeds = clip_embeds.to(dtype=torch.float16)
     pipe.unet.encoder_hid_proj.image_projection_layers[0].shortcut = False
     generated_image = pipe(
         ip_adapter_image_embeds=[id_embeds],
