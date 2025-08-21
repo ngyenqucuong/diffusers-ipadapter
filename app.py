@@ -23,11 +23,14 @@ import logging
 from contextlib import asynccontextmanager
 
 from hidiffusion import apply_hidiffusion, remove_hidiffusion
+from huggingface_hub import snapshot_download
 
+from insightface.app import FaceAnalysis
+import cv2
 
-
-
-
+snapshot_download(
+    repo_id="InstantX/InstantID", allow_patterns="/models/antelopev2/*", local_dir="./models/antelopev2/"
+)
 
 
 # Setup logging
@@ -39,6 +42,7 @@ pipe = None
 executor = ThreadPoolExecutor(max_workers=1)
 processor = None
 
+face_analysis_app = None
 
 
 def initialize_pipelines():
@@ -49,7 +53,9 @@ def initialize_pipelines():
         # Clear CUDA cache before initialization
        
         logger.info("Loading face analysis model...")
-        
+        face_analysis_app = FaceAnalysis(name='antelopev2', root='./', providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+        face_analysis_app.prepare(ctx_id=0, det_size=(640, 640))
+
         image_encoder = CLIPVisionModelWithProjection.from_pretrained(
             "h94/IP-Adapter", subfolder="models/image_encoder", torch_dtype=torch.float16
         ).to("cuda")
@@ -133,6 +139,11 @@ os.makedirs(results_dir, exist_ok=True)
 async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Image,request: Img2ImgRequest):
     negative_prompt = f"{request.negative_prompt},monochrome, lowres, bad anatomy, worst quality, low quality"
     pipe.set_ip_adapter_scale([request.strength,request.ip_adapter_scale])
+    cv2image = cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR)
+    faces = face_analysis_app.get(cv2image)
+    if len(faces) == 0:
+        raise HTTPException(status_code=400, detail="No face detected in the provided image")
+    faceid_embeds = torch.from_numpy(faces[0].normed_embedding).unsqueeze(0)
     generated_image = pipe(
         ip_adapter_image=[pose_image, face_image],
         prompt=request.prompt,
@@ -140,6 +151,8 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
         num_inference_steps=request.num_inference_steps,
         generator = torch.Generator(device="cuda").manual_seed(request.seed),
         num_images_per_prompt=1,
+        faceid_embeds=faceid_embeds
+
     ).images[0]
     filename = f"{job_id}_base.png"
     filepath = os.path.join(results_dir, filename)
