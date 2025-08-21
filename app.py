@@ -114,8 +114,8 @@ def initialize_pipelines():
             unet=unet
         )
         pipe.cuda()
-        pipe.enable_xformers_memory_efficient_attention()
-        pipe.enable_vae_slicing()
+        # pipe.enable_xformers_memory_efficient_attention()
+        # pipe.enable_vae_slicing()
 
         pipe.load_ip_adapter_instantid(face_adapter)
 
