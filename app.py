@@ -164,7 +164,7 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
     neg_ref_images_embeds = torch.zeros_like(ref_images_embeds)
     id_embeds = torch.cat([neg_ref_images_embeds, ref_images_embeds]).to(dtype=torch.float16, device="cuda")
     clip_embeds = pipe.prepare_ip_adapter_image_embeds(
-        [facealign_pil], None, torch.device("cuda"), 1, True
+        [facealign_pil,facealign_pil], None, torch.device("cuda"), 1, True
     )[0]
     seed = request.seed 
     if not request.seed:
@@ -173,7 +173,7 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
     pipe.unet.encoder_hid_proj.image_projection_layers[0].clip_embeds = clip_embeds.to(dtype=torch.float16)
     pipe.unet.encoder_hid_proj.image_projection_layers[0].shortcut = False
     generated_image = pipe(
-        ip_adapter_image=[facealign_pil, facealign_pil], 
+        ip_adapter_image=[facealign_pil], 
         ip_adapter_image_embeds=[None, id_embeds],
         prompt=request.prompt,
         negative_prompt=negative_prompt,
