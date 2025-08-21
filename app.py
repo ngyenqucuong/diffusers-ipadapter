@@ -139,20 +139,6 @@ results_dir = "results"
 os.makedirs(results_dir, exist_ok=True)
 
 
-def extract_face_features(image_lst: list, input_size: tuple):
-    # Extract Face features using insightface
-    ref_images = []
-
-    face_analysis_app.prepare(ctx_id=0, det_size=input_size)
-    for img in image_lst:
-        image = cv2.cvtColor(np.asarray(img), cv2.COLOR_BGR2RGB)
-        faces = face_analysis_app.get(image)
-        image = torch.from_numpy(faces[0].normed_embedding)
-        ref_images.append(image.unsqueeze(0))
-    ref_images = torch.cat(ref_images, dim=0)
-
-    return ref_images
-
 
 async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Image,request: Img2ImgRequest):
     negative_prompt = f"{request.negative_prompt},monochrome, lowres, bad anatomy, worst quality, low quality"
@@ -161,7 +147,8 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
     ip_adapter_images = []
     cv2_face_image = cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR)
     faces = app.get(cv2_face_image)
-    ip_adapter_images.append(face_align.norm_crop(cv2_face_image, landmark=faces[0].kps, image_size=224))
+    facealign = face_align.norm_crop(cv2_face_image, landmark=faces[0].kps, image_size=224)
+    ip_adapter_images.append(facealign)
     faceimage = torch.from_numpy(faces[0].normed_embedding)
     ref_images_embeds.append(faceimage.unsqueeze(0))
     ref_images_embeds = torch.stack(ref_images_embeds, dim=0).unsqueeze(0)
