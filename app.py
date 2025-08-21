@@ -6,12 +6,11 @@ from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 from typing import Optional
 import torch
-from transformers import CLIPVisionModelWithProjection
 
 from pipeline_stable_diffusion_xl_instantid import StableDiffusionXLInstantIDPipeline, draw_kps
 from diffusers.models import ControlNetModel
-from diffusers import EulerDiscreteScheduler
-from PIL import Image ,ImageDraw
+from diffusers import LCMScheduler
+from PIL import Image 
 import numpy as np
 import io
 import json
@@ -92,10 +91,6 @@ def initialize_pipelines():
         logger.info("Loading face analysis model...")
         face_analysis_app = FaceAnalysis(name='antelopev2', root='./', providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
         face_analysis_app.prepare(ctx_id=0, det_size=(640, 640))
-
-        image_encoder = CLIPVisionModelWithProjection.from_pretrained(
-            "laion/CLIP-ViT-H-14-laion2B-s32B-b79K"
-        ).to("cuda")
         face_adapter = f'./checkpoints/ip-adapter.bin'
         controlnet_path = f'./checkpoints/ControlNetModel'
         controlnet = ControlNetModel.from_pretrained(controlnet_path, torch_dtype=torch.float16)
@@ -103,13 +98,11 @@ def initialize_pipelines():
             "stabilityai/stable-diffusion-xl-base-1.0",
             controlnet=controlnet,
             torch_dtype=torch.float16,
-            image_encoder=image_encoder
         )
         pipe.load_ip_adapter_instantid(face_adapter)
-        pipe.scheduler = EulerDiscreteScheduler.from_config(
-            pipe.scheduler.config
-        )
-        pipe.load_lora_weights("latent-consistency/lcm-lora-sdxl")
+        pipe.scheduler = LCMScheduler.from_config(pipe.scheduler.config)
+
+        # pipe.load_lora_weights("latent-consistency/lcm-lora-sdxl")
         pipe.cuda()
         # pipe.image_proj_model.to("cuda")
         # pipe.unet.to("cuda")
