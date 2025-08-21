@@ -68,15 +68,7 @@ def initialize_pipelines():
             image_encoder=image_encoder,
         ).to("cuda")
         pipe.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
-        pipe.load_ip_adapter(
-            ["h94/IP-Adapter", "h94/IP-Adapter-FaceID"],
-            subfolder=["sdxl_models", ""],
-            weight_name=[
-                "ip-adapter_sdxl_vit-h.safetensors",
-                "ip-adapter-faceid-plusv2_sdxl.bin"
-            ],
-            image_encoder_folder=None,
-        )
+        
         # pipe.load_ip_adapter(
         #     [ "h94/IP-Adapter", "h94/IP-Adapter-FaceID"],
         #     subfolder=[ "sdxl_models",""],
@@ -86,7 +78,7 @@ def initialize_pipelines():
         #     ],
         #     image_encoder_folder=None,
         # )
-        # pipe.load_ip_adapter("h94/IP-Adapter-FaceID", subfolder=None, weight_name="ip-adapter-faceid-plusv2_sdxl.bin")
+        pipe.load_ip_adapter("h94/IP-Adapter-FaceID", subfolder=None, weight_name="ip-adapter-faceid-plusv2_sdxl.bin")
         pipe.enable_model_cpu_offload()
         # apply_hidiffusion(pipe)   
         
@@ -151,39 +143,35 @@ os.makedirs(results_dir, exist_ok=True)
 async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Image,request: Img2ImgRequest):
     negative_prompt = f"{request.negative_prompt},monochrome, lowres, bad anatomy, worst quality, low quality"
     # pipe.set_ip_adapter_scale([request.strength,request.ip_adapter_scale])
-    adapter_weight_lst = [request.ip_adapter_scale,request.ip_adapter_scale]
+    ref_images_embeds = []
+    ip_adapter_images = []
+    adapter_weight_lst = [request.ip_adapter_scale]
 
     pipe.set_ip_adapter_scale(adapter_weight_lst)
     cv2_face_image = cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR)
     faces = face_analysis_app.get(cv2_face_image)
-    face = max(faces, key=lambda x: x.det_score)
-    facealign = face_align.norm_crop(cv2_face_image, landmark=face.kps, image_size=224)
-    facealign_pil = Image.fromarray(cv2.cvtColor(facealign, cv2.COLOR_BGR2RGB))
-    faceimage = torch.from_numpy(face.normed_embedding)
-    ref_images_embeds = faceimage.unsqueeze(0).unsqueeze(0)
+    facealign = face_align.norm_crop(cv2_face_image, landmark=faces[0].kps, image_size=224)
+    ip_adapter_images.append(facealign)
+    faceimage = torch.from_numpy(faces[0].normed_embedding)
+    ref_images_embeds.append(faceimage.unsqueeze(0))
+    ref_images_embeds = torch.stack(ref_images_embeds, dim=0).unsqueeze(0)
     neg_ref_images_embeds = torch.zeros_like(ref_images_embeds)
     id_embeds = torch.cat([neg_ref_images_embeds, ref_images_embeds]).to(dtype=torch.float16, device="cuda")
-    clip_embeds = pipe.prepare_ip_adapter_image_embeds(
-        [facealign_pil,facealign_pil], None, torch.device("cuda"), 1, True
-    )
+    clip_embeds = pipe.prepare_ip_adapter_image_embeds([ip_adapter_images], None, torch.device("cuda"), 1, True)[0]
     seed = request.seed 
     if not request.seed:
         seed = torch.randint(0, 2**32, (1,), dtype=torch.int64).item()
 
-    pipe.unet.encoder_hid_proj.image_projection_layers[0].clip_embeds = clip_embeds[0].to(dtype=torch.float16)
+    pipe.unet.encoder_hid_proj.image_projection_layers[0].clip_embeds = clip_embeds.to(dtype=torch.float16)
     pipe.unet.encoder_hid_proj.image_projection_layers[0].shortcut = False
-    pipe.unet.encoder_hid_proj.image_projection_layers[1].clip_embeds = clip_embeds[1].to(dtype=torch.float16)
-    pipe.unet.encoder_hid_proj.image_projection_layers[1].shortcut = True
-
     generated_image = pipe(
-        ip_adapter_image_embeds=[id_embeds,id_embeds],
+        ip_adapter_image_embeds=[id_embeds],
         prompt=request.prompt,
         negative_prompt=negative_prompt,
         num_inference_steps=request.num_inference_steps,
         generator = torch.Generator(device="cuda").manual_seed(seed),
         num_images_per_prompt=1,
-        strength=request.strength,
-        guidance_scale=request.guidance_scale
+
     ).images[0]
     filename = f"{job_id}_base.png"
     filepath = os.path.join(results_dir, filename)
