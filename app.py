@@ -145,13 +145,12 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
         raise HTTPException(status_code=400, detail="No face detected in the provided image")
     faceid_embeds = torch.from_numpy(faces[0].normed_embedding).unsqueeze(0)
     generated_image = pipe(
-        ip_adapter_image=[pose_image, face_image],
+        ip_adapter_image=[pose_image, faceid_embeds],
         prompt=request.prompt,
         negative_prompt=negative_prompt,
         num_inference_steps=request.num_inference_steps,
         generator = torch.Generator(device="cuda").manual_seed(request.seed),
         num_images_per_prompt=1,
-        faceid_embeds=faceid_embeds
 
     ).images[0]
     filename = f"{job_id}_base.png"
