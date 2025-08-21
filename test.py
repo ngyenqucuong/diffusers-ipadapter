@@ -154,12 +154,16 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
 
     pipe.unet.encoder_hid_proj.image_projection_layers[0].clip_embeds = clip_embeds.to(dtype=torch.float16)
     pipe.unet.encoder_hid_proj.image_projection_layers[0].shortcut = False
+    seed = request.seed
+    if not request.seed:
+        seed = torch.randint(0, 2**32, (1,), device="cuda").item()
+
     generated_image = pipe(
         ip_adapter_image_embeds=[id_embeds],
         prompt=request.prompt,
         negative_prompt=negative_prompt,
         num_inference_steps=request.num_inference_steps,
-        generator = torch.Generator(device="cuda").manual_seed(request.seed),
+        generator = torch.Generator(device="cuda").manual_seed(seed),
         num_images_per_prompt=1,
 
     ).images[0]
@@ -170,7 +174,7 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
     metadata = {
         "job_id": job_id,
         "type": "head_swap",
-        "seed": request.seed,
+        "seed": seed,
         "prompt": request.prompt,
         "parameters": request.dict(),
         "filename": filename,
