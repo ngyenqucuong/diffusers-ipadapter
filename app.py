@@ -145,6 +145,8 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
     # pipe.set_ip_adapter_scale([request.strength,request.ip_adapter_scale])
     ref_images_embeds = []
     ip_adapter_images = []
+    pipe.set_ip_adapter_scale(request.ip_adapter_scale)
+
     cv2_face_image = cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR)
     faces = face_analysis_app.get(cv2_face_image)
     facealign = face_align.norm_crop(cv2_face_image, landmark=faces[0].kps, image_size=224)
