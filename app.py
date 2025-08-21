@@ -111,10 +111,10 @@ def initialize_pipelines():
         )
         pipe.load_lora_weights("latent-consistency/lcm-lora-sdxl")
         pipe.cuda()
-        pipe.image_proj_model.to("cuda")
-        pipe.unet.to("cuda")
+        # pipe.image_proj_model.to("cuda")
+        # pipe.unet.to("cuda")
         pipe.enable_model_cpu_offload()
-        apply_hidiffusion(pipe)   
+        # apply_hidiffusion(pipe)   
         
     except Exception as e:
         logger.error(f"Failed to initialize pipelines: {e}")
