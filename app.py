@@ -26,6 +26,8 @@ from hidiffusion import apply_hidiffusion, remove_hidiffusion
 from huggingface_hub import snapshot_download
 
 from insightface.app import FaceAnalysis
+from insightface.utils import face_align
+
 import cv2
 
 snapshot_download(
@@ -67,16 +69,16 @@ def initialize_pipelines():
         ).to("cuda")
         pipe.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
         
-        pipe.load_ip_adapter(
-            [ "h94/IP-Adapter", "h94/IP-Adapter-FaceID"],
-            subfolder=[ "sdxl_models",""],
-            weight_name=[
-                "ip-adapter_sdxl_vit-h.safetensors",
-                "ip-adapter-faceid-plusv2_sdxl.bin"
-            ],
-            image_encoder_folder=None,
-        )
-        
+        # pipe.load_ip_adapter(
+        #     [ "h94/IP-Adapter", "h94/IP-Adapter-FaceID"],
+        #     subfolder=[ "sdxl_models",""],
+        #     weight_name=[
+        #         "ip-adapter_sdxl_vit-h.safetensors",
+        #         "ip-adapter-faceid-plusv2_sdxl.bin"
+        #     ],
+        #     image_encoder_folder=None,
+        # )
+        pipe.load_ip_adapter("h94/IP-Adapter-FaceID", subfolder=None, weight_name="ip-adapter-faceid-plusv2_sdxl.bin")
         pipe.enable_model_cpu_offload()
         # apply_hidiffusion(pipe)   
         
@@ -136,16 +138,41 @@ jobs = {}
 results_dir = "results"
 os.makedirs(results_dir, exist_ok=True)
 
+
+def extract_face_features(image_lst: list, input_size: tuple):
+    # Extract Face features using insightface
+    ref_images = []
+
+    face_analysis_app.prepare(ctx_id=0, det_size=input_size)
+    for img in image_lst:
+        image = cv2.cvtColor(np.asarray(img), cv2.COLOR_BGR2RGB)
+        faces = face_analysis_app.get(image)
+        image = torch.from_numpy(faces[0].normed_embedding)
+        ref_images.append(image.unsqueeze(0))
+    ref_images = torch.cat(ref_images, dim=0)
+
+    return ref_images
+
+
 async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Image,request: Img2ImgRequest):
     negative_prompt = f"{request.negative_prompt},monochrome, lowres, bad anatomy, worst quality, low quality"
-    pipe.set_ip_adapter_scale([request.strength,request.ip_adapter_scale])
-    cv2image = cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR)
-    faces = face_analysis_app.get(cv2image)
-    if len(faces) == 0:
-        raise HTTPException(status_code=400, detail="No face detected in the provided image")
-    faceid_embeds = torch.from_numpy(faces[0].normed_embedding).unsqueeze(0)
+    # pipe.set_ip_adapter_scale([request.strength,request.ip_adapter_scale])
+    ref_images_embeds = []
+    ip_adapter_images = []
+    cv2_face_image = cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR)
+    faces = app.get(cv2_face_image)
+    ip_adapter_images.append(face_align.norm_crop(image, landmark=faces[0].kps, image_size=224))
+    faceimage = torch.from_numpy(faces[0].normed_embedding)
+    ref_images_embeds.append(faceimage.unsqueeze(0))
+    ref_images_embeds = torch.stack(ref_images_embeds, dim=0).unsqueeze(0)
+    neg_ref_images_embeds = torch.zeros_like(ref_images_embeds)
+    id_embeds = torch.cat([neg_ref_images_embeds, ref_images_embeds]).to(dtype=torch.float16, device="cuda")
+    clip_embeds = pipe.prepare_ip_adapter_image_embeds(
+                [face_image], None, torch.device("cuda"), 1, True)[0]
+    pipe.unet.encoder_hid_proj.image_projection_layers[0].clip_embeds = clip_embeds.to(dtype=torch.float16)
+    pipe.unet.encoder_hid_proj.image_projection_layers[0].shortcut = False
     generated_image = pipe(
-        ip_adapter_image=[pose_image, faceid_embeds],
+        ip_adapter_image_embeds=[id_embeds],
         prompt=request.prompt,
         negative_prompt=negative_prompt,
         num_inference_steps=request.num_inference_steps,
