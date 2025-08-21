@@ -151,7 +151,7 @@ os.makedirs(results_dir, exist_ok=True)
 async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Image,request: Img2ImgRequest):
     negative_prompt = f"{request.negative_prompt},monochrome, lowres, bad anatomy, worst quality, low quality"
     # pipe.set_ip_adapter_scale([request.strength,request.ip_adapter_scale])
-    adapter_weight_lst = [request.strength,request.ip_adapter_scale]
+    adapter_weight_lst = [request.ip_adapter_scale,request.ip_adapter_scale]
 
     pipe.set_ip_adapter_scale(adapter_weight_lst)
     cv2_face_image = cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR)
@@ -180,7 +180,8 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
         num_inference_steps=request.num_inference_steps,
         generator = torch.Generator(device="cuda").manual_seed(seed),
         num_images_per_prompt=1,
-
+        strength=request.strength,
+        guidance_scale=request.guidance_scale
     ).images[0]
     filename = f"{job_id}_base.png"
     filepath = os.path.join(results_dir, filename)
