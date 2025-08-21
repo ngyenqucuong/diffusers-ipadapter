@@ -47,7 +47,7 @@ face_analysis_app = None
 
 def initialize_pipelines():
     """Initialize the diffusion pipelines with InstantID and SDXL-Lightning - GPU optimized"""
-    global pipe
+    global pipe, face_analysis_app
     
     try:
         # Clear CUDA cache before initialization
