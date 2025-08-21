@@ -33,7 +33,7 @@ import cv2
 
 
 snapshot_download(
-    repo_id="InstantX/InstantID", allow_patterns="/models/antelopev2/*", local_dir="./models/"
+    repo_id="InstantX/InstantID", allow_patterns="/models/antelopev2/*", local_dir="./models/antelopev2/"
 )
 snapshot_download(
     repo_id="InstantX/InstantID", allow_patterns="/ControlNetModel/*", local_dir="./checkpoints/"
