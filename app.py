@@ -146,7 +146,7 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
     ref_images_embeds = []
     ip_adapter_images = []
     cv2_face_image = cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR)
-    faces = app.get(cv2_face_image)
+    faces = face_analysis_app.get(cv2_face_image)
     facealign = face_align.norm_crop(cv2_face_image, landmark=faces[0].kps, image_size=224)
     ip_adapter_images.append(facealign)
     faceimage = torch.from_numpy(faces[0].normed_embedding)
