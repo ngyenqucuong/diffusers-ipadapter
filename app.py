@@ -176,7 +176,7 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
     pipe.unet.encoder_hid_proj.image_projection_layers[1].shortcut = True
 
     generated_image = pipe(
-        ip_adapter_image_embeds=[id_embeds],
+        ip_adapter_image_embeds=[id_embeds,id_embeds],
         prompt=request.prompt,
         negative_prompt=negative_prompt,
         num_inference_steps=request.num_inference_steps,
