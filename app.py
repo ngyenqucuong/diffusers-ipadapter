@@ -6,10 +6,11 @@ from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 from typing import Optional
 import torch
-from diffusers import  AutoPipelineForText2Image,DDIMScheduler
 from transformers import CLIPVisionModelWithProjection
 
-
+from pipeline_stable_diffusion_xl_instantid import StableDiffusionXLInstantIDPipeline, draw_kps
+from diffusers.models import ControlNetModel
+from diffusers import EulerDiscreteScheduler
 from PIL import Image ,ImageDraw
 import numpy as np
 import io
@@ -23,15 +24,24 @@ import logging
 from contextlib import asynccontextmanager
 
 from hidiffusion import apply_hidiffusion, remove_hidiffusion
-from huggingface_hub import snapshot_download
+from huggingface_hub import snapshot_download,hf_hub_download
 
 from insightface.app import FaceAnalysis
 from insightface.utils import face_align
 
 import cv2
 
+
 snapshot_download(
-    repo_id="InstantX/InstantID", allow_patterns="/models/antelopev2/*", local_dir="./models/antelopev2/"
+    repo_id="InstantX/InstantID", allow_patterns="/models/antelopev2/*", local_dir="./models/"
+)
+snapshot_download(
+    repo_id="InstantX/InstantID", allow_patterns="/ControlNetModel/*", local_dir="./checkpoints/"
+)
+hf_hub_download(
+    repo_id="InstantX/InstantID",
+    filename="ip-adapter.bin",
+    local_dir="./checkpoints"
 )
 
 
@@ -46,6 +56,28 @@ processor = None
 
 face_analysis_app = None
 
+def resize_img(input_image, max_side=1280, min_side=1024, size=None, 
+               pad_to_max_side=False, mode=Image.BILINEAR, base_pixel_number=64):
+
+    w, h = input_image.size
+    if size is not None:
+        w_resize_new, h_resize_new = size
+    else:
+        ratio = min_side / min(h, w)
+        w, h = round(ratio*w), round(ratio*h)
+        ratio = max_side / max(h, w)
+        input_image = input_image.resize([round(ratio*w), round(ratio*h)], mode)
+        w_resize_new = (round(ratio * w) // base_pixel_number) * base_pixel_number
+        h_resize_new = (round(ratio * h) // base_pixel_number) * base_pixel_number
+    input_image = input_image.resize([w_resize_new, h_resize_new], mode)
+
+    if pad_to_max_side:
+        res = np.ones([max_side, max_side, 3], dtype=np.uint8) * 255
+        offset_x = (max_side - w_resize_new) // 2
+        offset_y = (max_side - h_resize_new) // 2
+        res[offset_y:offset_y+h_resize_new, offset_x:offset_x+w_resize_new] = np.array(input_image)
+        input_image = Image.fromarray(res)
+    return input_image
 
 def initialize_pipelines():
     """Initialize the diffusion pipelines with InstantID and SDXL-Lightning - GPU optimized"""
@@ -61,26 +93,26 @@ def initialize_pipelines():
         image_encoder = CLIPVisionModelWithProjection.from_pretrained(
             "laion/CLIP-ViT-H-14-laion2B-s32B-b79K"
         ).to("cuda")
-
-        pipe = AutoPipelineForText2Image.from_pretrained(
+        controlnet = ControlNetModel.from_pretrained("controlnet_path", torch_dtype=torch.float16)
+        face_adapter = f'./checkpoints/ip-adapter.bin'
+        controlnet_path = f'./checkpoints/ControlNetModel'
+        controlnet = ControlNetModel.from_pretrained(controlnet_path, torch_dtype=torch.float16)
+        pipe = StableDiffusionXLInstantIDPipeline.from_pretrained(
             "stabilityai/stable-diffusion-xl-base-1.0",
+            controlnet=controlnet,
             torch_dtype=torch.float16,
-            image_encoder=image_encoder,
-        ).to("cuda")
-        pipe.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
-        
-        # pipe.load_ip_adapter(
-        #     [ "h94/IP-Adapter", "h94/IP-Adapter-FaceID"],
-        #     subfolder=[ "sdxl_models",""],
-        #     weight_name=[
-        #         "ip-adapter_sdxl_vit-h.safetensors",
-        #         "ip-adapter-faceid-plusv2_sdxl.bin"
-        #     ],
-        #     image_encoder_folder=None,
-        # )
-        pipe.load_ip_adapter("h94/IP-Adapter-FaceID", subfolder=None, weight_name="ip-adapter-faceid-plusv2_sdxl.bin")
+            image_encoder=image_encoder
+        )
+        pipe.load_ip_adapter_instantid(face_adapter)
+        pipe.scheduler = EulerDiscreteScheduler.from_config(
+            pipe.scheduler.config
+        )
+        pipe.load_lora_weights("latent-consistency/lcm-lora-sdxl")
+        pipe.cuda()
+        pipe.image_proj_model.to("cuda")
+        pipe.unet.to("cuda")
         pipe.enable_model_cpu_offload()
-        # apply_hidiffusion(pipe)   
+        apply_hidiffusion(pipe)   
         
     except Exception as e:
         logger.error(f"Failed to initialize pipelines: {e}")
@@ -143,36 +175,44 @@ os.makedirs(results_dir, exist_ok=True)
 async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Image,request: Img2ImgRequest):
     negative_prompt = f"{request.negative_prompt},monochrome, lowres, bad anatomy, worst quality, low quality"
     # pipe.set_ip_adapter_scale([request.strength,request.ip_adapter_scale])
-    ref_images_embeds = []
-    ip_adapter_images = []
-    adapter_weight_lst = [request.ip_adapter_scale]
 
-    pipe.set_ip_adapter_scale(adapter_weight_lst)
     cv2_face_image = cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR)
+    pose_image_cv2 =  cv2.cvtColor(np.array(pose_image), cv2.COLOR_RGB2BGR)
+
+
     faces = face_analysis_app.get(cv2_face_image)
-    facealign = face_align.norm_crop(cv2_face_image, landmark=faces[0].kps, image_size=224)
-    ip_adapter_images.append(facealign)
-    faceimage = torch.from_numpy(faces[0].normed_embedding)
-    ref_images_embeds.append(faceimage.unsqueeze(0))
-    ref_images_embeds = torch.stack(ref_images_embeds, dim=0).unsqueeze(0)
-    neg_ref_images_embeds = torch.zeros_like(ref_images_embeds)
-    id_embeds = torch.cat([neg_ref_images_embeds, ref_images_embeds]).to(dtype=torch.float16, device="cuda")
-    clip_embeds = pipe.prepare_ip_adapter_image_embeds([ip_adapter_images], None, torch.device("cuda"), 1, True)[0]
-    seed = request.seed 
+    face_info = max(faces, key=lambda x: (x["bbox"][2] - x["bbox"][0]) * (x["bbox"][3] - x["bbox"][1]))
+    face_emb = face_info["embedding"]
+    
+    pose_faces = face_analysis_app.get(pose_image_cv2)
+    pose_info = max(pose_faces, key=lambda x: (x["bbox"][2] - x["bbox"][0]) * (x["bbox"][3] - x["bbox"][1]))
+    pose_kps = draw_kps(pose_image_cv2, pose_info["kps"])
+
+    width, height = pose_kps.size
+    control_mask = np.zeros([height, width, 3])
+    x1, y1, x2, y2 = face_info["bbox"]
+    x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+    control_mask[y1:y2, x1:x2] = 255
+    control_mask = Image.fromarray(control_mask.astype(np.uint8))
+    seed = request.seed
     if not request.seed:
         seed = torch.randint(0, 2**32, (1,), dtype=torch.int64).item()
-
-    pipe.unet.encoder_hid_proj.image_projection_layers[0].clip_embeds = clip_embeds.to(dtype=torch.float16)
-    pipe.unet.encoder_hid_proj.image_projection_layers[0].shortcut = False
+    generator = torch.Generator(device='cuda').manual_seed(seed)
     generated_image = pipe(
-        ip_adapter_image_embeds=[id_embeds],
         prompt=request.prompt,
         negative_prompt=negative_prompt,
+        image_embeds=face_emb,
+        image=pose_kps,
+        control_mask=control_mask,
+        controlnet_conditioning_scale=request.controlnet_conditioning_scale,
         num_inference_steps=request.num_inference_steps,
-        generator = torch.Generator(device="cuda").manual_seed(seed),
-        num_images_per_prompt=1,
-
+        guidance_scale=request.guidance_scale,
+        height=height,
+        width=width,
+        generator=generator,
+        num_images_per_prompt=1
     ).images[0]
+    
     filename = f"{job_id}_base.png"
     filepath = os.path.join(results_dir, filename)
     generated_image.save(filepath)
