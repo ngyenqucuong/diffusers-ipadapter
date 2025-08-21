@@ -190,7 +190,7 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
     pose_info = max(pose_faces, key=lambda x: (x["bbox"][2] - x["bbox"][0]) * (x["bbox"][3] - x["bbox"][1]))
     pose_kps = draw_kps(pose_image_cv2, pose_info["kps"])
 
-    width, height = pose_kps.size
+    width, height = pose_image_cv2.size
     control_mask = np.zeros([height, width, 3])
     x1, y1, x2, y2 = face_info["bbox"]
     x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)

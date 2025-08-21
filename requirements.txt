@@ -9,3 +9,4 @@ python-multipart==0.0.20
 hidiffusion
 accelerate
 onnxruntime-gpu
+peft
