@@ -96,7 +96,6 @@ def initialize_pipelines():
         image_encoder = CLIPVisionModelWithProjection.from_pretrained(
             "laion/CLIP-ViT-H-14-laion2B-s32B-b79K"
         ).to("cuda")
-        controlnet = ControlNetModel.from_pretrained("controlnet_path", torch_dtype=torch.float16)
         face_adapter = f'./checkpoints/ip-adapter.bin'
         controlnet_path = f'./checkpoints/ControlNetModel'
         controlnet = ControlNetModel.from_pretrained(controlnet_path, torch_dtype=torch.float16)

@@ -1,0 +1,2 @@
+aria2c --console-log-level=error -c -x 16 -s 16 -k 1M https://huggingface.co/InstantX/InstantID/resolve/main/ControlNetModel/diffusion_pytorch_model.safetensors -d ./checkpoints/ControlNetModel -o diffusion_pytorch_model.safetensors
+aria2c --console-log-level=error -c -x 16 -s 16 -k 1M https://huggingface.co/InstantX/InstantID/raw/main/ControlNetModel/config.json -d ./checkpoints/ControlNetModel -o config.json
