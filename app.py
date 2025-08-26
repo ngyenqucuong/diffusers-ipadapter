@@ -38,17 +38,22 @@ if not os.path.exists("./models/antelopev2/"):
     # run 'mv models/antelopev2/antelopev2/* models/antelopev2/' cmd
     os.system("mv ./models/antelopev2/antelopev2/* ./models/antelopev2/")
 
-
-# check if ./checkpoints/ControlNetModel/diffusion_pytorch_model.safetensors exist
-
-if not os.path.exists("./checkpoints/ControlNetModel/diffusion_pytorch_model.safetensors"):
+if not os.path.exists("./checkpoints/"):
+    # make dir 'ControlNetModel'
+    os.makedirs("./checkpoints/ControlNetModel", exist_ok=True)
+    hf_hub_download(
+        repo_id="InstantX/InstantID",
+        subfolder="ControlNetModel",
+        filename="config.json",
+        local_dir="./checkpoints"
+    )
+    
     hf_hub_download(
         repo_id="InstantX/InstantID",
         subfolder="ControlNetModel",
         filename="diffusion_pytorch_model.safetensors",
-        local_dir="./checkpoints/ControlNetModel"
+        local_dir="./checkpoints"
     )
-if not os.path.exists("./checkpoints/ip-adapter.bin"):
     hf_hub_download(
         repo_id="InstantX/InstantID",
         filename="ip-adapter.bin",
