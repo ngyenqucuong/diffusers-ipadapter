@@ -63,14 +63,14 @@ def initialize_pipelines():
         ).to("cuda")
 
         pipe = AutoPipelineForText2Image.from_pretrained(
-            "stabilityai/sd-turbo",
+            "stabilityai/stable-diffusion-xl-base-1.0",
             torch_dtype=torch.float16,
             image_encoder=image_encoder,
         ).to("cuda")
         pipe.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
         
-        pipe.load_ip_adapter("h94/IP-Adapter", subfolder=None, weight_name="ip-adapter-faceid-plusv2_sdxl.bin")
-        # pipe.load_lora_weights(hf_hub_download("h94/IP-Adapter-FaceID", "ip-adapter-faceid-plusv2_sdxl_lora.safetensors"))
+        pipe.load_ip_adapter("h94/IP-Adapter-FaceID", subfolder=None, weight_name="ip-adapter-faceid-plusv2_sdxl.bin")
+        pipe.load_lora_weights(hf_hub_download("h94/IP-Adapter-FaceID", "ip-adapter-faceid-plusv2_sdxl_lora.safetensors"))
         pipe.fuse_lora()
         pipe.enable_model_cpu_offload()
         apply_hidiffusion(pipe)   
@@ -108,7 +108,7 @@ app.add_middleware(
 
 class Img2ImgRequest(BaseModel):
     prompt: str
-    negative_prompt: Optional[str] = "(lowres, low quality, worst quality:1.2), (text:1.2), watermark, painting, drawing, illustration, glitch, deformed, mutated, cross-eyed, ugly, disfigured"
+    negative_prompt: Optional[str] = ""
     seed: Optional[int] = None
     strength: float = 0.8
     ip_adapter_scale: float = 0.8  # Lower for InstantID

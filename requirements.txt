@@ -11,4 +11,5 @@ peft==0.10.0
 transformers==4.37.1
 diffusers==0.25.1
 huggingface_hub==0.25.2
+xformers==0.0.31.post1
 

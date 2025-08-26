@@ -36,7 +36,7 @@ if not os.path.exists("./models/antelopev2/"):
         repo_id="InstantX/InstantID", allow_patterns="/models/antelopev2/*", local_dir="./models/antelopev2/"
     )
     # run 'mv models/antelopev2/antelopev2/* models/antelopev2/' cmd
-    os.system("mv models/antelopev2/antelopev2/* models/antelopev2/")
+    os.system("mv ./models/antelopev2/antelopev2/* ./models/antelopev2/")
 
 if not os.path.exists("./checkpoints/"):
     snapshot_download(
@@ -93,37 +93,38 @@ def initialize_pipelines():
         logger.info("Loading face analysis model...")
         face_analysis_app = FaceAnalysis(name='antelopev2', root='./', providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
         face_analysis_app.prepare(ctx_id=0, det_size=(640, 640))
-        face_adapter = f'./checkpoints/ip-adapter.bin'
-        controlnet_path = f'./checkpoints/ControlNetModel'
+        
+        # Path to InstantID models
+        face_adapter = './checkpoints/ip-adapter.bin'
+        controlnet_path = './checkpoints/ControlNetModel'
+        
+        # Load ControlNet
+        logger.info("Loading ControlNet...")
         controlnet = ControlNetModel.from_pretrained(controlnet_path, torch_dtype=torch.float16)
-        image_encoder = CLIPVisionModelWithProjection.from_pretrained(
-                "h94/IP-Adapter",  # Giữ nguyên nếu image_encoder chưa tải local, hoặc thay bằng local path nếu có
-                subfolder="models/image_encoder",
-                torch_dtype=torch.float16,
-            ).to("cuda")
+        
+        # SDXL-Lightning LoRA path
         repo = "ByteDance/SDXL-Lightning"
-        ckpt = "sdxl_lightning_4step_unet.safetensors"
-        unet = UNet2DConditionModel.from_config("stabilityai/stable-diffusion-xl-base-1.0", subfolder="unet").to("cuda", torch.float16)
+        ckpt = "sdxl_lightning_8step_unet.safetensors"
+        
+        # Base model path
+        base_model_path = 'stabilityai/stable-diffusion-xl-base-1.0'
+        
+        logger.info("Loading SDXL base pipeline...")
+        unet = UNet2DConditionModel.from_config(base_model_path, subfolder="unet").to("cuda", torch.float16)
         unet.load_state_dict(load_file(hf_hub_download(repo, ckpt), device="cuda"))
         pipe = StableDiffusionXLInstantIDPipeline.from_pretrained(
-            "stabilityai/stable-diffusion-xl-base-1.0",
+            base_model_path,
             controlnet=controlnet,
             torch_dtype=torch.float16,
-            image_encoder=image_encoder,
             unet=unet
         )
         pipe.cuda()
-        # pipe.enable_xformers_memory_efficient_attention()
-        # pipe.enable_vae_slicing()
-
+        pipe.enable_xformers_memory_efficient_attention()
+        pipe.enable_vae_slicing()
         pipe.load_ip_adapter_instantid(face_adapter)
-
         pipe.scheduler = EulerDiscreteScheduler.from_config(pipe.scheduler.config, timestep_spacing="trailing")
 
-
-        # pipe.image_proj_model.to("cuda")
-        # pipe.unet.to("cuda")
-        pipe.enable_model_cpu_offload()
+        
         
     except Exception as e:
         logger.error(f"Failed to initialize pipelines: {e}")
@@ -312,7 +313,7 @@ async def img2img(
     strength: float = Form(0.85),
     ip_adapter_scale: float = Form(0.8),  # Lower for InstantID
     controlnet_conditioning_scale: float = Form(0.8),
-    num_inference_steps: int = Form(50),  # Number of inference steps
+    num_inference_steps: int = Form(8),  # Number of inference steps
     detail_face: bool = Form(False),
     guidance_scale: float = Form(0),  # Zero for LCM
     seed: Optional[int] = Form(None),
