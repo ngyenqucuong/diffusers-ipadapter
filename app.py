@@ -241,12 +241,13 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
         image_embeds=face_emb,
         image=pose_kps,
         control_image=pose_kps,
-        controlnet_conditioning_scale=float(request.controlnet_conditioning_scale),
+        controlnet_conditioning_scale=request.controlnet_conditioning_scale,
         ip_adapter_scale=request.ip_adapter_scale,
         num_inference_steps=request.num_inference_steps,
         guidance_scale=request.guidance_scale,
         strength=request.strength,
         generator=generator,
+        num_images_per_prompt=1
     ).images[0]
     
     filename = f"{job_id}_base.png"
