@@ -1,7 +1,6 @@
 insightface==0.7.3
 torch==2.4.0
 torchvision==0.19.0
-transformers==4.55.2
 fastapi==0.116.1
 uvicorn==0.35.0
 python-multipart==0.0.20
