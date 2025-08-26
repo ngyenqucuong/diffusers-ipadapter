@@ -9,6 +9,6 @@ onnxruntime-gpu==1.22.0
 peft==0.16.0
 transformers==4.54.0
 diffusers==0.34.0
-huggingface_hub==0.25.2
+huggingface_hub==0.34.0
 xformers==0.0.31.post1
 itsdangerous==2.2.0
