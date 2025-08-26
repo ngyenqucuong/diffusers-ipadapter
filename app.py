@@ -21,7 +21,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import logging
 from contextlib import asynccontextmanager
-from transformers import CLIPVisionModelWithProjection
+# from transformers import CLIPVisionModelWithProjection
 
 from safetensors.torch import load_file
 
@@ -235,6 +235,7 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
     #     generator=generator,
     #     num_images_per_prompt=1
     # ).images[0]
+    print(request.controlnet_conditioning_scale)
     generated_image = pipe(
         prompt=request.prompt,
         negative_prompt=negative_prompt,
@@ -243,7 +244,7 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
         control_image=pose_kps,
         controlnet_conditioning_scale=request.controlnet_conditioning_scale,
         ip_adapter_scale=request.ip_adapter_scale,
-        num_inference_steps=4,
+        num_inference_steps=request.num_inference_steps,
         guidance_scale=request.guidance_scale,
         strength=request.strength,
         generator=generator,
