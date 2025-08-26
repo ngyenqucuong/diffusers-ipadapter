@@ -197,7 +197,7 @@ os.makedirs(results_dir, exist_ok=True)
 
 
 async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Image,request: Img2ImgRequest):
-    negative_prompt = f"{request.negative_prompt},monochrome, lowres, bad anatomy, worst quality, low quality"
+    negative_prompt = f"{request.negative_prompt}, blue artifacts, color bleeding, unnatural colors, mask edges, visible seams"
     # pipe.set_ip_adapter_scale([request.strength,request.ip_adapter_scale])
     face_image = resize_img(face_image)
     cv2_face_image = cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR)
@@ -211,15 +211,13 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
     pose_info = max(pose_faces, key=lambda x: (x["bbox"][2] - x["bbox"][0]) * (x["bbox"][3] - x["bbox"][1]))
     pose_kps = draw_kps(pose_image, pose_info["kps"])
 
-    width, height = pose_kps.size
-    control_mask = np.zeros([height, width, 3])
-    x1, y1, x2, y2 = face_info["bbox"]
-    x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-    control_mask[y1:y2, x1:x2] = 255
-    control_mask = Image.fromarray(control_mask.astype(np.uint8))
-    seed = request.seed
-    if not request.seed:
-        seed = torch.randint(0, 2**32, (1,)).item()
+    # width, height = pose_kps.size
+    # control_mask = np.zeros([height, width, 3])
+    # x1, y1, x2, y2 = face_info["bbox"]
+    # x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+    # control_mask[y1:y2, x1:x2] = 255
+    # control_mask = Image.fromarray(control_mask.astype(np.uint8))
+    seed = request.seed if request.seed else torch.randint(0, 2**32, (1,)).item()
     generator = torch.Generator(device='cuda').manual_seed(seed)
     # generated_image = pipe(
     #     prompt=request.prompt,
