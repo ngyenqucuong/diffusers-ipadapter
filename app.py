@@ -68,7 +68,6 @@ logger = logging.getLogger(__name__)
 # Global variables for pipelines
 pipe = None
 executor = ThreadPoolExecutor(max_workers=1)
-processor = None
 
 face_analysis_app = None
 
@@ -132,6 +131,7 @@ def initialize_pipelines():
         )
         pipe.cuda()
         pipe.enable_xformers_memory_efficient_attention()
+        pipe.enable_attention_slicing()
         pipe.enable_vae_slicing()
         pipe.load_ip_adapter_instantid(face_adapter)
         pipe.scheduler = EulerDiscreteScheduler.from_config(pipe.scheduler.config, timestep_spacing="trailing")
@@ -199,10 +199,9 @@ os.makedirs(results_dir, exist_ok=True)
 async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Image,request: Img2ImgRequest):
     negative_prompt = f"{request.negative_prompt},monochrome, lowres, bad anatomy, worst quality, low quality"
     # pipe.set_ip_adapter_scale([request.strength,request.ip_adapter_scale])
-
+    face_image = resize_img(face_image)
     cv2_face_image = cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR)
     pose_image_cv2 =  cv2.cvtColor(np.array(pose_image), cv2.COLOR_RGB2BGR)
-
 
     faces = face_analysis_app.get(cv2_face_image)
     face_info = max(faces, key=lambda x: (x["bbox"][2] - x["bbox"][0]) * (x["bbox"][3] - x["bbox"][1]))
@@ -220,21 +219,34 @@ async def gen_img2img(job_id: str, face_image : Image.Image,pose_image: Image.Im
     control_mask = Image.fromarray(control_mask.astype(np.uint8))
     seed = request.seed
     if not request.seed:
-        seed = torch.randint(0, 2**32, (1,), dtype=torch.int64).item()
+        seed = torch.randint(0, 2**32, (1,)).item()
     generator = torch.Generator(device='cuda').manual_seed(seed)
+    # generated_image = pipe(
+    #     prompt=request.prompt,
+    #     negative_prompt=negative_prompt,
+    #     image_embeds=face_emb,
+    #     image=pose_kps,
+    #     control_mask=control_mask,
+    #     controlnet_conditioning_scale=request.controlnet_conditioning_scale,
+    #     num_inference_steps=request.num_inference_steps,
+    #     guidance_scale=0,
+    #     height=height,
+    #     width=width,
+    #     generator=generator,
+    #     num_images_per_prompt=1
+    # ).images[0]
     generated_image = pipe(
         prompt=request.prompt,
         negative_prompt=negative_prompt,
         image_embeds=face_emb,
         image=pose_kps,
-        control_mask=control_mask,
+        control_image=pose_kps,
         controlnet_conditioning_scale=request.controlnet_conditioning_scale,
-        num_inference_steps=request.num_inference_steps,
-        guidance_scale=0,
-        height=height,
-        width=width,
+        ip_adapter_scale=request.ip_adapter_scale,
+        num_inference_steps=4,
+        guidance_scale=request.guidance_scale,
+        strength=request.strength,
         generator=generator,
-        num_images_per_prompt=1
     ).images[0]
     
     filename = f"{job_id}_base.png"
